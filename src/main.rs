@@ -120,6 +120,10 @@ fn main() -> miette::Result<()> {
                 let mut watcher = Hotwatch::new_with_custom_delay(Duration::from_millis(500))
                     .into_diagnostic()?;
 
+                if !name.exists() {
+                    message(Red, "Warning", "Watched file does not yet exist");
+                }
+
                 watcher
                     .watch(folder_path, move |event: Event| match event.kind {
                         // Watch remove for vim changes
@@ -129,6 +133,11 @@ fn main() -> miette::Result<()> {
                             file_message(Green, "Watching", &name);
                             message(Green, "Re-checking", "file change detected");
                             message(Cyan, "Help", "press CTRL+C to exit");
+
+                            if !name.exists() {
+                                message(Red, "Warning", "Unable to find watched file");
+                                return Flow::Continue;
+                            }
 
                             let mut contents = StaticSource::new(
                                 fs::read_to_string(&name).into_diagnostic().unwrap(),
