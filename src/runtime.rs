@@ -1,14 +1,7 @@
 use core::panic;
-use std::{
-    cmp::Ordering,
-    i16,
-    io::{stdin, stdout, IsTerminal, Read, Write},
-    u16, u32, u8, usize,
-};
+use std::{cmp::Ordering, i16, u16, u32, usize};
 
 use crate::{Air, Traps};
-use colored::Colorize;
-use console::Term;
 use miette::Result;
 
 /// LC3 can address 128KB of memory.
