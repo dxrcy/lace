@@ -13,7 +13,7 @@ use hotwatch::{
 };
 use miette::{bail, IntoDiagnostic, Result};
 
-use crate::reset_state;
+use crate::{reset_state, Traps};
 use crate::{Air, RunState, StaticSource};
 
 /// Lace is a complete & convenient assembler toolchain for the LC3 assembly language.
@@ -70,7 +70,7 @@ pub fn main(traps: crate::Traps) -> miette::Result<()> {
     if let Some(command) = args.command {
         match command {
             Command::Run { name } => {
-                run(&name)?;
+                run(&name, traps)?;
                 Ok(())
             }
             Command::Compile { name, dest } => {
@@ -168,7 +168,7 @@ pub fn main(traps: crate::Traps) -> miette::Result<()> {
         }
     } else {
         if let Some(path) = args.path {
-            run(&path)?;
+            run(&path, traps)?;
             Ok(())
         } else {
             println!("\n~ lace v{VERSION} - Copyright (c) 2024 Artemis Rosman ~");
@@ -203,7 +203,7 @@ where
     println!("{left:>12} {right}");
 }
 
-fn run(name: &PathBuf) -> Result<()> {
+fn run(name: &PathBuf, traps: Traps) -> Result<()> {
     file_message(MsgColor::Green, "Assembling", &name);
     let mut program = if let Some(ext) = name.extension() {
         match ext.to_str().unwrap() {
@@ -222,12 +222,12 @@ fn run(name: &PathBuf) -> Result<()> {
                     .chunks_exact(2)
                     .map(|word| u16::from_be_bytes([word[0], word[1]]))
                     .collect();
-                RunState::from_raw(&u16_buf)?
+                RunState::from_raw(&u16_buf, traps)?
             }
             "asm" => {
                 let contents = StaticSource::new(fs::read_to_string(&name).into_diagnostic()?);
                 let air = assemble(&contents)?;
-                RunState::try_from(air)?
+                RunState::try_from(air, traps)?
             }
             _ => {
                 bail!("File has unknown extension. Exiting...")

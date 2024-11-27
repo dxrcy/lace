@@ -6,7 +6,7 @@ use std::{
     u16, u32, u8, usize,
 };
 
-use crate::Air;
+use crate::{Air, Traps};
 use colored::Colorize;
 use console::Term;
 use miette::Result;
@@ -20,13 +20,15 @@ pub struct RunState {
     /// Need to figure out if this would cause problems with the stack.
     mem: Box<[u16; MEMORY_MAX]>,
     /// Program counter
-    pc: u16,
+    pub(crate) pc: u16,
     /// 8x 16-bit registers
-    reg: [u16; 8],
+    pub(crate) reg: [u16; 8],
     /// Condition code
     flag: RunFlag,
     /// Processor status register
     _psr: u16,
+
+    traps: Traps,
 }
 
 #[derive(Clone, Copy)]
@@ -39,7 +41,7 @@ enum RunFlag {
 
 impl RunState {
     // Not generic because of miette error
-    pub fn try_from(air: Air) -> Result<RunState> {
+    pub fn try_from(air: Air, traps: Traps) -> Result<RunState> {
         let orig = air.orig().unwrap_or(0x3000);
         let mut air_array: Vec<u16> = Vec::with_capacity(air.len() + 1);
 
@@ -47,10 +49,10 @@ impl RunState {
         for stmt in air {
             air_array.push(stmt.emit()?);
         }
-        RunState::from_raw(air_array.as_slice())
+        RunState::from_raw(air_array.as_slice(), traps)
     }
 
-    pub fn from_raw(raw: &[u16]) -> Result<RunState> {
+    pub fn from_raw(raw: &[u16], traps: Traps) -> Result<RunState> {
         let orig = raw[0] as usize;
         if orig as usize + raw.len() > MEMORY_MAX {
             panic!("Assembly file is too long and cannot fit in memory.");
@@ -67,6 +69,7 @@ impl RunState {
             reg: [0, 0, 0, 0, 0, 0, 0, 0xFDFF],
             flag: RunFlag::Uninit,
             _psr: 0,
+            traps,
         })
     }
 
@@ -105,13 +108,13 @@ impl RunState {
     }
 
     #[inline]
-    fn reg(&mut self, reg: u16) -> &mut u16 {
+    pub(crate) fn reg(&mut self, reg: u16) -> &mut u16 {
         // SAFETY: Should only be indexed with values that are & 0b111
         unsafe { self.reg.get_unchecked_mut(reg as usize) }
     }
 
     #[inline]
-    fn mem(&mut self, addr: u16) -> &mut u16 {
+    pub(crate) fn mem(&mut self, addr: u16) -> &mut u16 {
         // SAFETY: memory fits any u16 index
         unsafe { self.mem.get_unchecked_mut(addr as usize) }
     }
@@ -306,86 +309,14 @@ impl RunState {
 
     fn trap(&mut self, instr: u16) {
         let trap_vect = instr & 0xFF;
-        match trap_vect {
-            // getc
-            0x20 => {
-                *self.reg(0) = read_input() as u16;
+        match self.traps.get(trap_vect) {
+            Some(trap_fn) => {
+                trap_fn(self);
             }
-            // out
-            0x21 => {
-                let chr = (*self.reg(0) & 0xFF) as u8 as char;
-                print!("{chr}");
-                stdout().flush().unwrap();
+            _ => {
+                panic!("You called a trap with an unknown vector of {}", trap_vect);
             }
-            // puts
-            0x22 => {
-                // could probably rewrite with iterators but idk if worth
-                for addr in *self.reg(0).. {
-                    let chr_raw = *self.mem(addr);
-                    let chr_ascii = (chr_raw & 0xFF) as u8 as char;
-                    if chr_ascii == '\0' {
-                        break;
-                    }
-                    print!("{}", chr_ascii);
-                }
-                stdout().flush().unwrap();
-            }
-            // in
-            0x23 => {
-                let ch = read_input();
-                *self.reg(0) = ch as u16;
-                print!("{}", ch);
-                stdout().flush().unwrap();
-            }
-            // putsp
-            0x24 => {
-                'string: for addr in *self.reg(0).. {
-                    let chr_raw = *self.mem(addr);
-                    for chr in [chr_raw >> 8, chr_raw & 0xFF] {
-                        let chr_ascii = chr as u8 as char;
-                        if chr_ascii == '\0' {
-                            break 'string;
-                        }
-                        print!("{}", chr_ascii);
-                    }
-                }
-                stdout().flush().unwrap();
-            }
-            // halt
-            0x25 => {
-                self.pc = u16::MAX;
-                println!("\n{:>12}", "Halted".cyan());
-            }
-            // putn
-            0x26 => {
-                let val = *self.reg(0);
-                println!("{val}");
-            }
-            // reg
-            0x27 => {
-                println!("\n------ Registers ------");
-                for (i, reg) in self.reg.iter().enumerate() {
-                    println!("r{i}: {reg:.>#19}");
-                    // println!("r{i}: {reg:.>#19b}");
-                }
-                println!("-----------------------");
-            }
-            // unknown
-            _ => panic!("You called a trap with an unknown vector of {}", trap_vect),
         }
-    }
-}
-
-// Read one byte from stdin or unbuffered terminal
-fn read_input() -> u8 {
-    if stdin().is_terminal() {
-        let cons = Term::stdout();
-        let ch = cons.read_char().unwrap();
-        ch as u8
-    } else {
-        let mut buf = [0; 1];
-        stdin().read_exact(&mut buf).unwrap();
-        buf[0]
     }
 }
 
