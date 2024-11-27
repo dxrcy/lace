@@ -63,7 +63,7 @@ enum Command {
     },
 }
 
-pub fn main() -> miette::Result<()> {
+pub fn main(traps: crate::Traps) -> miette::Result<()> {
     use MsgColor::*;
     let args = Args::parse();
 

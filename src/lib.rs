@@ -15,4 +15,21 @@ pub use symbol::{reset_state, StaticSource};
 mod error;
 mod lexer;
 
-pub mod bin;
+mod bin;
+
+pub use bin::main;
+
+pub struct Traps {
+    // TODO(opt): Use function pointer instead of Option
+    array: [Option<TrapFn>; 8],
+}
+
+type TrapFn = fn(&mut RunState) -> ();
+
+impl Default for Traps {
+    fn default() -> Self {
+        Self {
+            array: [Default::default(); 8],
+        }
+    }
+}
