@@ -348,7 +348,7 @@ impl AsmParser {
                     unexpected,
                 ))
             }
-            None => return Err(error::parse_eof(self.src)),
+            None => Err(error::parse_eof(self.src)),
         }
     }
 
@@ -359,12 +359,10 @@ impl AsmParser {
     ) -> Result<Token> {
         match self.toks.next() {
             Some(tok) if check(&tok.kind) => Ok(tok),
-            Some(unexpected) => {
-                return Err(error::parse_generic_unexpected(
-                    self.src, expected, unexpected,
-                ))
-            }
-            None => return Err(error::parse_eof(self.src)),
+            Some(unexpected) => Err(error::parse_generic_unexpected(
+                self.src, expected, unexpected,
+            )),
+            None => Err(error::parse_eof(self.src)),
         }
     }
 
@@ -424,15 +422,13 @@ impl AsmParser {
                     let val = self.expect_lit(Bits::Signed(5))?;
                     Ok(ImmediateOrReg::Imm5(val as u8))
                 }
-                _ => {
-                    return Err(error::parse_generic_unexpected(
-                        self.src,
-                        "literal or register",
-                        *tok,
-                    ))
-                }
+                _ => Err(error::parse_generic_unexpected(
+                    self.src,
+                    "literal or register",
+                    *tok,
+                )),
             },
-            None => return Err(error::parse_eof(self.src)),
+            None => Err(error::parse_eof(self.src)),
         }
     }
 }

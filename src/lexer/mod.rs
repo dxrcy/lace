@@ -1,7 +1,6 @@
 use std::fmt::Display;
 use std::num::IntErrorKind;
 use std::str::FromStr;
-use std::{i16, u16};
 
 use miette::Result;
 
@@ -225,9 +224,9 @@ impl Cursor<'_> {
         let str_val = self.get_range(start..self.abs_pos());
 
         // i16 to handle negative values
-        let value = match i16::from_str_radix(&str_val, 10) {
+        let value = match str_val.parse::<i16>() {
             Ok(value) => value,
-            Err(_) => match u16::from_str_radix(&str_val, 10) {
+            Err(_) => match str_val.parse::<u16>() {
                 Ok(val) => val as i16,
                 Err(e) => {
                     return Err(error::lex_invalid_lit(

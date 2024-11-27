@@ -1,9 +1,7 @@
 use core::panic;
 use std::{
     cmp::Ordering,
-    i16,
     io::{stdin, stdout, IsTerminal, Read, Write},
-    u16, u32, u8, usize,
 };
 
 use crate::Air;
@@ -52,14 +50,14 @@ impl RunState {
 
     pub fn from_raw(raw: &[u16]) -> Result<RunState> {
         let orig = raw[0] as usize;
-        if orig as usize + raw.len() > MEMORY_MAX {
+        if orig + raw.len() > MEMORY_MAX {
             panic!("Assembly file is too long and cannot fit in memory.");
         }
 
         let mut mem = [0; MEMORY_MAX];
         let raw = &raw[1..];
 
-        mem[orig..orig + raw.len()].clone_from_slice(&raw);
+        mem[orig..orig + raw.len()].clone_from_slice(raw);
 
         Ok(RunState {
             mem: Box::new(mem),

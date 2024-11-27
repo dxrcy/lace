@@ -1,5 +1,3 @@
-use std::{i16, u16, u32};
-
 use miette::{bail, Result, Severity};
 
 use crate::symbol::{Flag, Label, Register};
@@ -12,6 +10,12 @@ pub struct Air {
     ast: Vec<AsmLine>,
 }
 
+impl Default for Air {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Air {
     pub fn new() -> Self {
         Air {
@@ -22,7 +26,7 @@ impl Air {
 
     /// Set the .orig offset for the program. Error if set twice.
     pub fn set_orig(&mut self, val: u16) -> Result<()> {
-        if let Some(_) = self.orig {
+        if self.orig.is_some() {
             bail!("Origin set twice.")
         } else {
             self.orig = Some(val);
@@ -45,6 +49,10 @@ impl Air {
 
     pub fn len(&self) -> usize {
         self.ast.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 
     pub fn backpatch(&mut self) -> Result<()> {
@@ -122,17 +130,11 @@ pub enum AirStmt {
         offset: u8,
     },
     /// Push onto stack (extended dialect)
-    Push {
-        src_reg: Register,
-    },
+    Push { src_reg: Register },
     /// Pop from stack (extended dialect)
-    Pop {
-        dest_reg: Register,
-    },
+    Pop { dest_reg: Register },
     /// Jump to subroutine and push onto stack (extended dialect)
-    Call {
-        dest_label: Label,
-    },
+    Call { dest_label: Label },
     /// Return from subroutine using stack (extended dialect)
     Rets,
     /// A raw value created during preprocessing
@@ -340,7 +342,7 @@ impl AsmLine {
             // 6. Continued offset when call
             //
             // There are 10 bits of offset precision when using a call instruction.
-            // There also isn't really a way to work around this setup if other instructions 
+            // There also isn't really a way to work around this setup if other instructions
             // are to be left untouched.
             AirStmt::Push { src_reg } => {
                 let mut raw = 0xD000;
