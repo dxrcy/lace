@@ -1,8 +1,17 @@
-use core::panic;
 use std::{cmp::Ordering, i16, u16, u32, usize};
 
 use crate::{Air, Traps};
 use miette::Result;
+
+macro_rules! exception {
+    ( $fmt:literal $($tt:tt)* ) => {{
+        eprintln!(
+            concat!("exception: ", $fmt, ", exiting")
+            $($tt)*
+        );
+        std::process::exit(0xEE);
+    }};
+}
 
 /// LC3 can address 128KB of memory.
 const MEMORY_MAX: usize = 0x10000;
@@ -48,13 +57,16 @@ impl RunState {
     pub fn from_raw(raw: &[u16], traps: Traps) -> Result<RunState> {
         let orig = raw[0] as usize;
         if orig as usize + raw.len() > MEMORY_MAX {
-            panic!("Assembly file is too long and cannot fit in memory.");
+            exception!("assembly file is too long and cannot fit in memory");
         }
 
         let mut mem = [0; MEMORY_MAX];
         let raw = &raw[1..];
 
         mem[orig..orig + raw.len()].clone_from_slice(&raw);
+        // Add `HALT` at end of code and data
+        // Prevents PC running through no-ops to the end of memory
+        mem[orig + raw.len()] = 0xF025;
 
         Ok(RunState {
             mem: Box::new(mem),
@@ -88,9 +100,11 @@ impl RunState {
     /// Run with preset memory
     pub fn run(&mut self) {
         loop {
+            if self.pc == u16::MAX {
+                break; // Halt was triggered
+            }
             if self.pc >= 0xFE00 {
-                // Entering device address space
-                break;
+                exception!("entered protected memory area >= 0xFE00");
             }
             let instr = self.mem[self.pc as usize];
             let opcode = (instr >> 12) as usize;
@@ -306,9 +320,10 @@ impl RunState {
             Some(trap_fn) => {
                 trap_fn(self);
             }
-            _ => {
-                panic!("You called a trap with an unknown vector of {}", trap_vect);
-            }
+            _ => exception!(
+                "called a trap with an unknown vector of 0x{:02x}",
+                trap_vect
+            ),
         }
     }
 }
@@ -322,7 +337,7 @@ mod test {
         fn expect(input: u16, bits: u32, expected: u16) {
             let actual = RunState::s_ext(input, bits);
             if actual != expected {
-                std::panic!(
+                panic!(
                     "\ns_ext(0x{input:04x}, {bits})\n  Expected: 0x{expected:04x}\n    Actual: 0x{actual:04x}\n"
                 );
             }
