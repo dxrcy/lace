@@ -43,19 +43,19 @@ impl Traps {
 }
 
 fn trap_getc(state: &mut RunState) {
-    *state.reg(0) = read_input() as u16;
+    *state.reg_mut(0) = read_input() as u16;
 }
 
 fn trap_out(state: &mut RunState) {
-    let chr = (*state.reg(0) & 0xFF) as u8 as char;
+    let chr = (*state.reg_mut(0) & 0xFF) as u8 as char;
     print!("{chr}");
     io::stdout().flush().unwrap();
 }
 
 fn trap_puts(state: &mut RunState) {
     // could probably rewrite with iterators but idk if worth
-    for addr in *state.reg(0).. {
-        let chr_raw = *state.mem(addr);
+    for addr in state.reg(0).. {
+        let chr_raw = state.mem(addr);
         let chr_ascii = (chr_raw & 0xFF) as u8 as char;
         if chr_ascii == '\0' {
             break;
@@ -67,14 +67,14 @@ fn trap_puts(state: &mut RunState) {
 
 fn trap_in(state: &mut RunState) {
     let ch = read_input();
-    *state.reg(0) = ch as u16;
+    *state.reg_mut(0) = ch as u16;
     print!("{}", ch);
     io::stdout().flush().unwrap();
 }
 
 fn trap_putsp(state: &mut RunState) {
-    'string: for addr in *state.reg(0).. {
-        let chr_raw = *state.mem(addr);
+    'string: for addr in state.reg(0).. {
+        let chr_raw = state.mem(addr);
         for chr in [chr_raw >> 8, chr_raw & 0xFF] {
             let chr_ascii = chr as u8 as char;
             if chr_ascii == '\0' {
@@ -92,7 +92,7 @@ fn trap_halt(state: &mut RunState) {
 }
 
 fn trap_putn(state: &mut RunState) {
-    let val = *state.reg(0);
+    let val = state.reg(0);
     println!("{val}");
 }
 
