@@ -66,6 +66,7 @@ enum Command {
 pub fn main(traps: crate::Traps) -> miette::Result<()> {
     use MsgColor::*;
     let args = Args::parse();
+    crate::env::init();
 
     if let Some(command) = args.command {
         match command {
