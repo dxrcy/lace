@@ -1,6 +1,6 @@
 use std::{cmp::Ordering, i16, u16, u32, usize};
 
-use crate::{Air, Traps};
+use crate::{env, Air, Traps};
 use miette::Result;
 
 macro_rules! exception {
@@ -115,13 +115,24 @@ impl RunState {
     }
 
     #[inline]
-    pub(crate) fn reg(&mut self, reg: u16) -> &mut u16 {
+    pub(crate) fn reg(&self, reg: u16) -> u16 {
+        debug_assert!(reg < 8, "tried to access invalid register 'r{}'", reg);
+        // SAFETY: Should only be indexed with values that are & 0b111
+        unsafe { *self.reg.get_unchecked(reg as usize) }
+    }
+    #[inline]
+    pub(crate) fn reg_mut(&mut self, reg: u16) -> &mut u16 {
+        debug_assert!(reg < 8, "tried to access invalid register 'r{}'", reg);
         // SAFETY: Should only be indexed with values that are & 0b111
         unsafe { self.reg.get_unchecked_mut(reg as usize) }
     }
 
+    pub(crate) fn mem(&self, addr: u16) -> u16 {
+        // SAFETY: memory fits any u16 index
+        unsafe { *self.mem.get_unchecked(addr as usize) }
+    }
     #[inline]
-    pub(crate) fn mem(&mut self, addr: u16) -> &mut u16 {
+    pub(crate) fn mem_mut(&mut self, addr: u16) -> &mut u16 {
         // SAFETY: memory fits any u16 index
         unsafe { self.mem.get_unchecked_mut(addr as usize) }
     }
@@ -149,6 +160,17 @@ impl RunState {
     }
 
     fn stack(&mut self, instr: u16) {
+        if !env::is_stack_enabled() {
+            eprintln!(
+                "\
+                You called a reserved instruction.\n\
+                Note: Run with `LACE_STACK=1` to enable stack features.\n\
+                Halting...\
+                "
+            );
+            std::process::exit(1);
+        }
+
         // Bit to determine call/ret or push/pop
         if instr & 0x0800 != 0 {
             // Call
@@ -164,29 +186,37 @@ impl RunState {
             let reg = (instr >> 6) & 0b111;
             // Push
             if instr & 0x0400 != 0 {
-                let val = *self.reg(reg);
+                let val = self.reg(reg);
                 self.push_val(val);
             }
             // Pop
             else {
                 let val = self.pop_val();
-                *self.reg(reg) = val;
+                *self.reg_mut(reg) = val;
             }
         }
     }
 
     fn push_val(&mut self, val: u16) {
+        debug_assert!(
+            env::is_stack_enabled(),
+            "caller should have ensured stack features are enabled",
+        );
         // Decrement stack
-        *self.reg(7) -= 1;
-        let sp = *self.reg(7);
+        *self.reg_mut(7) -= 1;
+        let sp = self.reg(7);
         // Save onto stack
-        *self.mem(sp) = val;
+        *self.mem_mut(sp) = val;
     }
 
     fn pop_val(&mut self) -> u16 {
-        let sp = *self.reg(7);
-        let val = *self.mem(sp);
-        *self.reg(7) += 1;
+        debug_assert!(
+            env::is_stack_enabled(),
+            "caller should have ensured stack features are enabled",
+        );
+        let sp = self.reg(7);
+        let val = self.mem(sp);
+        *self.reg_mut(7) += 1;
         val
     }
 
@@ -194,36 +224,36 @@ impl RunState {
         let dr = (instr >> 9) & 0b111;
         let sr = (instr >> 6) & 0b111;
 
-        let val1 = *self.reg(sr);
+        let val1 = self.reg(sr);
         // Check if imm
         let val2 = if instr & 0b100000 == 0 {
             // reg
-            *self.reg(instr & 0b111)
+            self.reg(instr & 0b111)
         } else {
             // imm
             Self::s_ext(instr, 5)
         };
         let res = val1.wrapping_add(val2);
         self.set_flags(res);
-        *self.reg(dr) = res;
+        *self.reg_mut(dr) = res;
     }
 
     fn and(&mut self, instr: u16) {
         let dr = (instr >> 9) & 0b111;
         let sr = (instr >> 6) & 0b111;
 
-        let val1 = *self.reg(sr);
+        let val1 = self.reg(sr);
         // Check if imm
         let val2 = if instr & 0b100000 == 0 {
             // reg
-            *self.reg(instr & 0b111)
+            self.reg(instr & 0b111)
         } else {
             // imm
             Self::s_ext(instr, 5)
         };
         let res = val1 & val2;
         self.set_flags(res);
-        *self.reg(dr) = res;
+        *self.reg_mut(dr) = res;
     }
 
     fn br(&mut self, instr: u16) {
@@ -235,15 +265,15 @@ impl RunState {
 
     fn jmp(&mut self, instr: u16) {
         let br = (instr >> 6) & 0b111;
-        self.pc = *self.reg(br)
+        self.pc = self.reg(br)
     }
 
     fn jsr(&mut self, instr: u16) {
-        *self.reg(7) = self.pc;
+        *self.reg_mut(7) = self.pc;
         if instr & 0x800 == 0 {
             // reg
             let br = (instr >> 6) & 0b111;
-            self.pc = *self.reg(br)
+            self.pc = self.reg(br)
         } else {
             // offs
             self.pc = self.pc.wrapping_add(Self::s_ext(instr, 11))
@@ -252,40 +282,40 @@ impl RunState {
 
     fn ld(&mut self, instr: u16) {
         let dr = (instr >> 9) & 0b111;
-        let val = *self.mem(self.pc.wrapping_add(Self::s_ext(instr, 9)));
-        *self.reg(dr) = val;
+        let val = self.mem(self.pc.wrapping_add(Self::s_ext(instr, 9)));
+        *self.reg_mut(dr) = val;
         self.set_flags(val);
     }
 
     fn ldi(&mut self, instr: u16) {
         let dr = (instr >> 9) & 0b111;
-        let ptr = *self.mem(self.pc.wrapping_add(Self::s_ext(instr, 9)));
-        let val = *self.mem(ptr);
-        *self.reg(dr) = val;
+        let ptr = self.mem(self.pc.wrapping_add(Self::s_ext(instr, 9)));
+        let val = self.mem(ptr);
+        *self.reg_mut(dr) = val;
         self.set_flags(val);
     }
 
     fn ldr(&mut self, instr: u16) {
         let dr = (instr >> 9) & 0b111;
         let br = (instr >> 6) & 0b111;
-        let ptr = *self.reg(br);
-        let val = *self.mem(ptr.wrapping_add(Self::s_ext(instr, 6)));
-        *self.reg(dr) = val;
+        let ptr = self.reg(br);
+        let val = self.mem(ptr.wrapping_add(Self::s_ext(instr, 6)));
+        *self.reg_mut(dr) = val;
         self.set_flags(val);
     }
 
     fn lea(&mut self, instr: u16) {
         let dr = (instr >> 9) & 0b111;
         let val = self.pc.wrapping_add(Self::s_ext(instr, 9));
-        *self.reg(dr) = val;
+        *self.reg_mut(dr) = val;
         self.set_flags(val);
     }
 
     fn not(&mut self, instr: u16) {
         let dr = (instr >> 9) & 0b111;
         let sr = (instr >> 6) & 0b111;
-        let val = !*self.reg(sr);
-        *self.reg(dr) = val;
+        let val = !self.reg(sr);
+        *self.reg_mut(dr) = val;
         self.set_flags(val);
     }
 
@@ -295,23 +325,23 @@ impl RunState {
 
     fn st(&mut self, instr: u16) {
         let sr = (instr >> 9) & 0b111;
-        let val = *self.reg(sr);
-        *self.mem(self.pc.wrapping_add(Self::s_ext(instr, 9))) = val;
+        let val = *self.reg_mut(sr);
+        *self.mem_mut(self.pc.wrapping_add(Self::s_ext(instr, 9))) = val;
     }
 
     fn sti(&mut self, instr: u16) {
         let sr = (instr >> 9) & 0b111;
-        let val = *self.reg(sr);
-        let ptr = *self.mem(self.pc.wrapping_add(Self::s_ext(instr, 9)));
-        *self.mem(ptr) = val;
+        let val = self.reg(sr);
+        let ptr = self.mem(self.pc.wrapping_add(Self::s_ext(instr, 9)));
+        *self.mem_mut(ptr) = val;
     }
 
     fn str(&mut self, instr: u16) {
         let sr = (instr >> 9) & 0b111;
         let br = (instr >> 6) & 0b111;
-        let ptr = *self.reg(br);
-        let val = *self.reg(sr);
-        *self.mem(ptr.wrapping_add(Self::s_ext(instr, 6))) = val;
+        let ptr = self.reg(br);
+        let val = self.reg(sr);
+        *self.mem_mut(ptr.wrapping_add(Self::s_ext(instr, 6))) = val;
     }
 
     fn trap(&mut self, instr: u16) {
