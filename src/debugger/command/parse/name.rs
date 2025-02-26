@@ -3,21 +3,21 @@ use super::{error, Arguments, CommandName};
 // TODO(feat): Add more aliases (such as undocumented typo aliases)
 #[rustfmt::skip]
 const COMMANDS: CommandNameList = &[
-    (CommandName::Help,        &["help", "--help", "h", "-h"]),
-    (CommandName::Continue,    &["continue", "cont", "c"]), // or 'proceed'
-    (CommandName::Finish,      &["finish", "fin", "f"]),
-    (CommandName::Exit,        &["exit"]),
-    (CommandName::Quit,        &["quit", "q"]),
-    (CommandName::Registers,   &["registers", "reg", "r"]),
-    (CommandName::Reset,       &["reset"]),
-    (CommandName::Step,        &["progress", "p"]), // or 'advance'
-    (CommandName::Next,        &["next", "n"]),
+    (CommandName::Help,        &["help", "--help", "h", "-h", "HELP", "man", "info", "wtf"]),
+    (CommandName::Next,        &["step", "s"]),
+    (CommandName::Step,        &["stepinto", "stepin", "step-into", "step-in", "stepi", "step-i", "si"]),
+    (CommandName::Finish,      &["stepout", "step-out", "stepo", "step-o", "so"]),
+    (CommandName::Continue,    &["continue", "cont", "c"]),
     (CommandName::Get,         &["get", "g"]),
-    (CommandName::Set,         &["set", "s"]),
-    (CommandName::Jump,        &["jump", "j"]),
-    (CommandName::Source,      &["assembly", "asm", "a"]), // or 'source'
-    (CommandName::Eval,        &["eval", "e"]),
+    (CommandName::Set,         &["move", "mov", "mv", "m"]),
+    (CommandName::Registers,   &["registers", "reg", "r"]),
+    (CommandName::Jump,        &["jump", "jmp", "j"]),
+    (CommandName::Source,      &["assembly", "asm", "a"]),
+    (CommandName::Eval,        &["eval", "evil", "e"]),
+    (CommandName::Reset,       &["reset"]),
     (CommandName::Echo,        &["echo"]),
+    (CommandName::Quit,        &["quit", "q"]),
+    (CommandName::Exit,        &["exit", "x", ":q", ":wq", "^C"]),
     (CommandName::BreakList,   &["breaklist", "bl"]),
     (CommandName::BreakAdd,    &["breakadd", "ba"]),
     (CommandName::BreakRemove, &["breakremove", "br"]),
