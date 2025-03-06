@@ -14,8 +14,7 @@ use hotwatch::{
 use miette::{bail, IntoDiagnostic, Result};
 
 use lace::features::Features;
-use lace::reset_state;
-use lace::{Air, RunState, StaticSource};
+use lace::{reset_state, with_symbol_table, Air, AsmLine, RunState, StaticSource};
 
 /// Lace is a complete & convenient assembler toolchain for the LC3 assembly language.
 #[derive(Parser)]
@@ -108,24 +107,24 @@ fn main() -> miette::Result<()> {
                 let contents = StaticSource::new(fs::read_to_string(&name).into_diagnostic()?);
                 let air = assemble(&contents)?;
 
-                let out_file_name =
-                    dest.unwrap_or(name.with_extension("lc3").file_name().unwrap().into());
-                let mut file = File::create(&out_file_name).unwrap();
+                let mut files = OutFiles::from(dest, name);
+                let orig = air.orig().unwrap_or(0x3000u16);
 
                 // Deal with .orig
-                if let Some(orig) = air.orig() {
-                    let _ = file.write(&orig.to_be_bytes());
-                } else {
-                    let _ = file.write(&0x3000u16.to_be_bytes());
-                }
+                files.write_header(orig)?;
 
                 // Write lines
                 for stmt in air {
-                    let _ = file.write(&stmt.emit()?.to_be_bytes());
+                    files.write_line(&stmt).unwrap();
                 }
 
+                // Symbol table
+                files.write_other(orig)?;
+
                 message(Green, "Finished", "emit binary");
-                file_message(Green, "Saved", &out_file_name);
+                // TODO(feat): Print file name after save
+                // file_message(Green, "Saved", files.code_name());
+                message(Green, "Saved", "(some files)");
                 Ok(())
             }
             Command::Check { name } => {
@@ -281,6 +280,75 @@ fn assemble(contents: &StaticSource) -> Result<Air> {
     let mut air = parser.parse()?;
     air.backpatch()?;
     Ok(air)
+}
+
+// TODO(doc)
+struct OutFiles {
+    code: File,
+    hex: File,
+    bin: File,
+    sym: File,
+}
+
+impl OutFiles {
+    const FILE_COUNT: u32 = 4;
+
+    // TODO(doc)
+    pub fn from(dest: Option<PathBuf>, mut path: PathBuf) -> Self {
+        let mut path = dest.unwrap_or_else(|| {
+            path.set_extension("lc3");
+            path
+        });
+        let code = File::create(&path).unwrap();
+
+        path.set_extension("hex");
+        let hex = File::create(&path).unwrap();
+
+        path.set_extension("bin");
+        let bin = File::create(&path).unwrap();
+
+        path.set_extension("sym");
+        let sym = File::create(&path).unwrap();
+
+        Self {
+            code,
+            hex,
+            bin,
+            sym,
+        }
+    }
+
+    // TODO(doc)
+    pub fn write_header(&mut self, orig: u16) -> miette::Result<()> {
+        let orig = orig;
+
+        self.code.write(&orig.to_be_bytes()).unwrap();
+        writeln!(self.hex, "{:04X}", orig).unwrap();
+        writeln!(self.bin, "{:016b}", orig).unwrap();
+
+        Ok(())
+    }
+
+    // TODO(doc)
+    pub fn write_line(&mut self, stmt: &AsmLine) -> miette::Result<()> {
+        let word = stmt.emit()?;
+
+        self.code.write(&word.to_be_bytes()).unwrap();
+        writeln!(self.hex, "{:04X}", word).unwrap();
+        writeln!(self.bin, "{:016b}", word).unwrap();
+
+        Ok(())
+    }
+
+    // TODO(doc)
+    pub fn write_other(&mut self, orig: u16) -> miette::Result<()> {
+        with_symbol_table(|sym| {
+            for (symbol, addr) in sym {
+                writeln!(self.sym, "{:-74} x{:04X}", symbol, *addr + orig - 1).unwrap();
+            }
+            Ok(())
+        })
+    }
 }
 
 const LOGO: &str = r#"
