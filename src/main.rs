@@ -283,6 +283,7 @@ fn assemble(contents: &StaticSource) -> Result<Air> {
 }
 
 // TODO(doc)
+// TODO(feat): `lst` file (this will require a bit of refactoring...)
 struct OutFiles {
     code: File,
     hex: File,
@@ -299,14 +300,13 @@ impl OutFiles {
             path.set_extension("lc3");
             path
         });
-        let code = File::create(&path).unwrap();
 
+        // `set_extension` to avoid clone
+        let code = File::create(&path).unwrap();
         path.set_extension("hex");
         let hex = File::create(&path).unwrap();
-
         path.set_extension("bin");
         let bin = File::create(&path).unwrap();
-
         path.set_extension("sym");
         let sym = File::create(&path).unwrap();
 
@@ -340,10 +340,15 @@ impl OutFiles {
         Ok(())
     }
 
+    // TODO(rename)
     // TODO(doc)
     pub fn write_other(&mut self, orig: u16) -> miette::Result<()> {
         with_symbol_table(|sym| {
-            for (symbol, addr) in sym {
+            // TODO(opt): There might be a better way to do this...
+            let mut sorted: Vec<_> = sym.iter().collect();
+            sorted.sort_by_key(|(_, v)| *v);
+
+            for (symbol, addr) in sorted {
                 writeln!(self.sym, "{:-74} x{:04X}", symbol, *addr + orig - 1).unwrap();
             }
             Ok(())
