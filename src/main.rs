@@ -1,5 +1,5 @@
 use std::fs::{self, File};
-use std::io::{Read, Write};
+use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::thread::sleep;
 use std::time::Duration;
@@ -107,24 +107,24 @@ fn main() -> miette::Result<()> {
                 let contents = StaticSource::new(fs::read_to_string(&name).into_diagnostic()?);
                 let air = assemble(&contents)?;
 
-                let mut files = OutFiles::from(dest, name);
+                // TODO(fix): Handle `io` errors! Or at least use `expect` over `unwrap`
+
+                let mut files = OutFiles::from(dest, name).unwrap();
                 let orig = air.orig().unwrap_or(0x3000u16);
 
-                // Deal with .orig
-                files.write_header(orig)?;
-
                 // Write lines
+                files.write_line(orig).unwrap();
                 for stmt in air {
-                    files.write_line(&stmt).unwrap();
+                    files.write_line(stmt.emit()?).unwrap();
                 }
 
                 // Symbol table
-                files.write_other(orig)?;
+                files.write_other(orig).unwrap();
 
                 message(Green, "Finished", "emit binary");
                 // TODO(feat): Print file name after save
                 // file_message(Green, "Saved", files.code_name());
-                message(Green, "Saved", "(some files)");
+                message(Green, "Saved", "");
                 Ok(())
             }
             Command::Check { name } => {
@@ -292,64 +292,48 @@ struct OutFiles {
 }
 
 impl OutFiles {
-    const FILE_COUNT: u32 = 4;
-
     // TODO(doc)
-    pub fn from(dest: Option<PathBuf>, mut path: PathBuf) -> Self {
+    pub fn from(dest: Option<PathBuf>, mut path: PathBuf) -> io::Result<Self> {
         let mut path = dest.unwrap_or_else(|| {
             path.set_extension("lc3");
             path
         });
 
         // `set_extension` to avoid clone
-        let code = File::create(&path).unwrap();
+        let code = File::create(&path)?;
         path.set_extension("hex");
-        let hex = File::create(&path).unwrap();
+        let hex = File::create(&path)?;
         path.set_extension("bin");
-        let bin = File::create(&path).unwrap();
+        let bin = File::create(&path)?;
         path.set_extension("sym");
-        let sym = File::create(&path).unwrap();
+        let sym = File::create(&path)?;
 
-        Self {
+        Ok(Self {
             code,
             hex,
             bin,
             sym,
-        }
+        })
     }
 
     // TODO(doc)
-    pub fn write_header(&mut self, orig: u16) -> miette::Result<()> {
-        let orig = orig;
-
-        self.code.write(&orig.to_be_bytes()).unwrap();
-        writeln!(self.hex, "{:04X}", orig).unwrap();
-        writeln!(self.bin, "{:016b}", orig).unwrap();
-
-        Ok(())
-    }
-
-    // TODO(doc)
-    pub fn write_line(&mut self, stmt: &AsmLine) -> miette::Result<()> {
-        let word = stmt.emit()?;
-
-        self.code.write(&word.to_be_bytes()).unwrap();
-        writeln!(self.hex, "{:04X}", word).unwrap();
-        writeln!(self.bin, "{:016b}", word).unwrap();
-
+    pub fn write_line(&mut self, word: u16) -> io::Result<()> {
+        self.code.write(&word.to_be_bytes())?;
+        writeln!(self.hex, "{:04X}", word)?;
+        writeln!(self.bin, "{:016b}", word)?;
         Ok(())
     }
 
     // TODO(rename)
     // TODO(doc)
-    pub fn write_other(&mut self, orig: u16) -> miette::Result<()> {
+    pub fn write_other(&mut self, orig: u16) -> io::Result<()> {
         with_symbol_table(|sym| {
             // TODO(opt): There might be a better way to do this...
             let mut sorted: Vec<_> = sym.iter().collect();
             sorted.sort_by_key(|(_, v)| *v);
 
             for (symbol, addr) in sorted {
-                writeln!(self.sym, "{:-74} x{:04X}", symbol, *addr + orig - 1).unwrap();
+                writeln!(self.sym, "{:-74} x{:04X}", symbol, *addr + orig - 1)?;
             }
             Ok(())
         })
