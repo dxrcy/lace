@@ -1,5 +1,5 @@
 use std::fs::{self, File};
-use std::io::{self, Read, Write};
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::thread::sleep;
 use std::time::Duration;
@@ -14,7 +14,7 @@ use hotwatch::{
 use miette::{bail, IntoDiagnostic, Result};
 
 use lace::features::Features;
-use lace::{reset_state, with_symbol_table, Air, AsmLine, RunState, StaticSource};
+use lace::{reset_state, with_symbol_table, Air, RunState, StaticSource};
 
 /// Lace is a complete & convenient assembler toolchain for the LC3 assembly language.
 #[derive(Parser)]
@@ -109,22 +109,39 @@ fn main() -> miette::Result<()> {
 
                 // TODO(fix): Handle `io` errors! Or at least use `expect` over `unwrap`
 
-                let mut files = OutFiles::from(dest, name).unwrap();
+                let out_path = dest.unwrap_or_else(|| {
+                    let mut name = name;
+                    name.set_extension("lc3");
+                    name
+                });
+                let sym_path = out_path.with_extension("sym");
+
+                let mut out_file = File::create(&out_path).unwrap();
+                let mut sym_file = File::create(&sym_path).unwrap();
+
+                // Deal with .orig
                 let orig = air.orig().unwrap_or(0x3000u16);
+                out_file.write(&orig.to_be_bytes()).unwrap();
 
                 // Write lines
-                files.write_line(orig).unwrap();
                 for stmt in air {
-                    files.write_line(stmt.emit()?).unwrap();
+                    out_file.write(&stmt.emit()?.to_be_bytes()).unwrap();
                 }
 
                 // Symbol table
-                files.write_other(orig).unwrap();
+                with_symbol_table(|sym| {
+                    // TODO(opt): There might be a better way to do this...
+                    let mut sorted: Vec<_> = sym.iter().collect();
+                    sorted.sort_by_key(|(_, v)| *v);
+
+                    for (symbol, addr) in sorted {
+                        writeln!(sym_file, "{:-74} x{:04X}", symbol, *addr + orig - 1).unwrap();
+                    }
+                });
 
                 message(Green, "Finished", "emit binary");
-                // TODO(feat): Print file name after save
-                // file_message(Green, "Saved", files.code_name());
-                message(Green, "Saved", "");
+                file_message(Green, "Saved", &out_path);
+                file_message(Green, "Saved", &sym_path);
                 Ok(())
             }
             Command::Check { name } => {
@@ -280,64 +297,6 @@ fn assemble(contents: &StaticSource) -> Result<Air> {
     let mut air = parser.parse()?;
     air.backpatch()?;
     Ok(air)
-}
-
-// TODO(doc)
-// TODO(feat): `lst` file (this will require a bit of refactoring...)
-struct OutFiles {
-    code: File,
-    hex: File,
-    bin: File,
-    sym: File,
-}
-
-impl OutFiles {
-    // TODO(doc)
-    pub fn from(dest: Option<PathBuf>, mut path: PathBuf) -> io::Result<Self> {
-        let mut path = dest.unwrap_or_else(|| {
-            path.set_extension("lc3");
-            path
-        });
-
-        // `set_extension` to avoid clone
-        let code = File::create(&path)?;
-        path.set_extension("hex");
-        let hex = File::create(&path)?;
-        path.set_extension("bin");
-        let bin = File::create(&path)?;
-        path.set_extension("sym");
-        let sym = File::create(&path)?;
-
-        Ok(Self {
-            code,
-            hex,
-            bin,
-            sym,
-        })
-    }
-
-    // TODO(doc)
-    pub fn write_line(&mut self, word: u16) -> io::Result<()> {
-        self.code.write(&word.to_be_bytes())?;
-        writeln!(self.hex, "{:04X}", word)?;
-        writeln!(self.bin, "{:016b}", word)?;
-        Ok(())
-    }
-
-    // TODO(rename)
-    // TODO(doc)
-    pub fn write_other(&mut self, orig: u16) -> io::Result<()> {
-        with_symbol_table(|sym| {
-            // TODO(opt): There might be a better way to do this...
-            let mut sorted: Vec<_> = sym.iter().collect();
-            sorted.sort_by_key(|(_, v)| *v);
-
-            for (symbol, addr) in sorted {
-                writeln!(self.sym, "{:-74} x{:04X}", symbol, *addr + orig - 1)?;
-            }
-            Ok(())
-        })
-    }
 }
 
 const LOGO: &str = r#"
