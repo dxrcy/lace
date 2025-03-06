@@ -44,6 +44,9 @@ enum Command {
         name: PathBuf,
         /// Destination to output .lc3 file
         dest: Option<PathBuf>,
+        /// Create symbol `.sym` file mapping label names to addresses
+        #[arg(short, long)]
+        symbol_table: bool,
         #[command(flatten)]
         run_options: RunOptions,
     },
@@ -100,6 +103,7 @@ fn main() -> miette::Result<()> {
             Command::Compile {
                 name,
                 dest,
+                symbol_table,
                 run_options: RunOptions { features },
             } => {
                 lace::features::init(features);
@@ -107,17 +111,13 @@ fn main() -> miette::Result<()> {
                 let contents = StaticSource::new(fs::read_to_string(&name).into_diagnostic()?);
                 let air = assemble(&contents)?;
 
-                // TODO(fix): Handle `io` errors! Or at least use `expect` over `unwrap`
-
                 let out_path = dest.unwrap_or_else(|| {
                     let mut name = name;
                     name.set_extension("lc3");
                     name
                 });
                 let sym_path = out_path.with_extension("sym");
-
                 let mut out_file = File::create(&out_path).unwrap();
-                let mut sym_file = File::create(&sym_path).unwrap();
 
                 // Deal with .orig
                 let orig = air.orig().unwrap_or(0x3000u16);
@@ -128,20 +128,26 @@ fn main() -> miette::Result<()> {
                     out_file.write(&stmt.emit()?.to_be_bytes()).unwrap();
                 }
 
-                // Symbol table
-                with_symbol_table(|sym| {
-                    // TODO(opt): There might be a better way to do this...
-                    let mut sorted: Vec<_> = sym.iter().collect();
-                    sorted.sort_by_key(|(_, v)| *v);
+                if symbol_table {
+                    let mut sym_file = File::create(&sym_path).unwrap();
 
-                    for (symbol, addr) in sorted {
-                        writeln!(sym_file, "{:-74} x{:04X}", symbol, *addr + orig - 1).unwrap();
-                    }
-                });
+                    // Symbol table
+                    with_symbol_table(|sym| {
+                        // TODO(opt): There might be a better way to do this...
+                        let mut sorted: Vec<_> = sym.iter().collect();
+                        sorted.sort_by_key(|(_, v)| *v);
+
+                        for (symbol, addr) in sorted {
+                            writeln!(sym_file, "{:-74} x{:04X}", symbol, *addr + orig - 1).unwrap();
+                        }
+                    });
+                }
 
                 message(Green, "Finished", "emit binary");
                 file_message(Green, "Saved", &out_path);
-                file_message(Green, "Saved", &sym_path);
+                if symbol_table {
+                    file_message(Green, "Saved", &sym_path);
+                }
                 Ok(())
             }
             Command::Check { name } => {
