@@ -146,15 +146,7 @@ impl Cursor<'_> {
                     self.bump();
                     self.hex()?
                 }
-                // TODO(refactor): Extract this duplicated block
-                _ => {
-                    let start = self.abs_pos() - 1;
-                    self.take_while(|c| !is_whitespace(c));
-                    return Err(error::lex_unknown(
-                        (start..self.abs_pos()).into(),
-                        self.src(),
-                    ));
-                }
+                _ => return Err(error::lex_unknown(self.next_token_span(), self.src())),
             },
             // Register literals
             'r' | 'R' => match self.first() {
@@ -175,14 +167,7 @@ impl Cursor<'_> {
                 }
                 _ => self.ident()?,
             },
-            '0'..='9' => {
-                let start = self.abs_pos() - 1;
-                self.take_while(|c| !is_whitespace(c));
-                return Err(error::lex_unknown(
-                    (start..self.abs_pos()).into(),
-                    self.src(),
-                ));
-            }
+            '0'..='9' => return Err(error::lex_unknown(self.next_token_span(), self.src())),
             // Check only after other identifier-likes
             c if is_id(c) => self.ident()?,
             // Decimal literal
@@ -192,14 +177,7 @@ impl Cursor<'_> {
             // String literal
             '"' => self.str()?,
             // Unknown starting characters
-            _ => {
-                let start = self.abs_pos() - 1;
-                self.take_while(|c| !is_whitespace(c));
-                return Err(error::lex_unknown(
-                    (start..self.abs_pos()).into(),
-                    self.src(),
-                ));
-            }
+            _ => return Err(error::lex_unknown(self.next_token_span(), self.src())),
         };
         let res = Token::new(
             token_kind,
@@ -207,6 +185,12 @@ impl Cursor<'_> {
         );
         self.reset_pos();
         Ok(res)
+    }
+
+    fn next_token_span(&mut self) -> Span {
+        let start = self.abs_pos() - 1;
+        self.take_while(|c| !is_whitespace(c));
+        (start..self.abs_pos()).into()
     }
 
     fn hex(&mut self) -> Result<TokenKind> {
