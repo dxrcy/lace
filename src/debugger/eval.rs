@@ -66,7 +66,7 @@ fn eval_inner(state: &mut RunState, line: &'static str) -> Result<()> {
         // If this branch is taken when using a trap mnemonic (eg. `eval reg`), then this is a
         // mistake!
         // WARNING: If custom traps are implemented, this condition should be changed!!
-        AirStmt::Trap { trap_vect } if !(0x20..=0x27).contains(&trap_vect) => {
+        AirStmt::Trap { trap_vect } if !(0x20..=0x2d).contains(&trap_vect) => {
             dprintln!(
                 Alternate,
                 Error,

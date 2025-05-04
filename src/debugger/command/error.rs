@@ -222,7 +222,8 @@ impl Argument {
 const MNEMONICS: &[&str] = &[
     "add", "and", "br", "brnzp", "brnz", "brzp", "brnp", "brn", "brz", "brp", "jmp", "jsr", "jsrr",
     "ld", "ldi", "ldr", "lea", "not", "ret", "rti", "st", "sti", "str", "pop", "push", "call",
-    "rets", "trap", "getc", "out", "puts", "in", "putsp", "halt", "putn", "reg",
+    "rets", "trap", "getc", "out", "puts", "in", "putsp", "halt", "putn", "reg", "chat", "getp",
+    "setp", "getb", "setb", "geth",
 ];
 
 fn is_mnemonic(command_name: &str) -> Option<&'static str> {
