@@ -63,15 +63,17 @@ fn eval_inner(state: &mut RunState, line: &'static str) -> Result<()> {
 
         // Don't allow unknown/invalid trap instructions
         // To prevent exception and program exit
+        // If this branch is taken when using a trap mnemonic (eg. `eval reg`), then this is a
+        // mistake!
         // WARNING: If custom traps are implemented, this condition should be changed!!
-        AirStmt::Trap { trap_vect } if !(0x20..=0x2d).contains(&trap_vect) => {
+        AirStmt::Trap { trap_vect } if !(0x20..=0x27).contains(&trap_vect) => {
             dprintln!(
                 Alternate,
                 Error,
                 "DisallowedInstruction::UnknownTrap",
                 ["Simulating invalid or unknown trap instructions is not permitted."],
             );
-            dprintln!(Sometimes, Error, "What are you even trying to do?");
+            dprintln!(Sometimes, Error, "Check that the trap vector is correct.");
             return Ok(());
         }
 

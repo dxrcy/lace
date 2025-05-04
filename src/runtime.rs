@@ -580,8 +580,9 @@ impl RunState {
                 *self.reg_mut(1) = height as u16;
             }
 
-            // Note that if custom traps are implemented, `src/debugger/eval.rs` must be modified
-            // to explicitely allow `eval` to simulate the traps
+            // Note that if custom traps are implemented, these files must also be modified:
+            // - `src/debugger/eval.rs`: to explicitely allow `eval` to simulate the traps
+            // - `src/debugger/command/error.rs`: to suggest `eval` when command name is a mnemonic
 
             // unknown
             _ => exception!(
