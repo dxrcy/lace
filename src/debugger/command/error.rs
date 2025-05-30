@@ -223,10 +223,8 @@ const MNEMONICS: &[&str] = &[
 ];
 
 fn is_mnemonic(command_name: &str) -> Option<&'static str> {
-    for mnemonic in MNEMONICS {
-        if mnemonic.eq_ignore_ascii_case(command_name) {
-            return Some(mnemonic);
-        }
-    }
-    None
+    MNEMONICS
+        .iter()
+        .find(|&mnemonic| mnemonic.eq_ignore_ascii_case(command_name))
+        .copied()
 }

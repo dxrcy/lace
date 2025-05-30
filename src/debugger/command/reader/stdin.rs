@@ -54,6 +54,7 @@ where
         return Err(());
     };
 
+    #[allow(clippy::needless_range_loop)] // Suggested style is too complicated
     for i in 1..utf8_len {
         let Some(byte) = next_byte() else {
             return Err(());
