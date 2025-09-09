@@ -54,6 +54,12 @@ Check the repo for updates as it is under active development.
 
 Tagged releases are available to the right for all major platforms.
 
+Download the latest release and install like so:
+
+```sh
+sudo install [downloaded file] /usr/bin/lace
+```
+
 You can use `cargo` to get set up easily and consistently. If you are
 unsure what `cargo` is, check out [this help page](https://doc.rust-lang.org/cargo/getting-started/installation.html).
 Alternatively, there is a *flake.nix* available with a Rust development shell, if you have Nix set up.
