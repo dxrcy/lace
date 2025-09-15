@@ -239,6 +239,11 @@ impl RunState {
     }
 
     #[inline]
+    pub(super) fn orig(&self) -> u16 {
+        self.orig
+    }
+
+    #[inline]
     pub(super) fn pc(&self) -> u16 {
         self.pc
     }

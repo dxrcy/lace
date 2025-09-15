@@ -81,7 +81,8 @@ fn eval_inner(state: &mut RunState, line: &'static str) -> Result<()> {
     }
 
     // Check labels
-    let mut asm = AsmLine::new(0, stmt, Span::dummy());
+    let line = state.pc() - state.orig();
+    let mut asm = AsmLine::new(line, stmt, Span::dummy());
     asm.backpatch()?;
 
     // Compile and execute
