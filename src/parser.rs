@@ -105,7 +105,7 @@ fn preprocess_simple(src: &'static str) -> Result<Vec<Token>> {
     Ok(res)
 }
 
-fn unescape(s: &str) -> Cow<str> {
+fn unescape(s: &str) -> Cow<'_, str> {
     if s.find('\\').is_none() {
         return Cow::Borrowed(s);
     }

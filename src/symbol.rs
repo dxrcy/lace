@@ -289,10 +289,6 @@ pub enum DirKind {
     Break,
 }
 
-/// Newtype representing an offset from a particular address.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
-pub struct LineOffs(u16);
-
 /// Used to refer to offsets from the start of a source file.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct SrcOffset(pub usize);
