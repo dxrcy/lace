@@ -1,28 +1,36 @@
-use std::{i16, u16, u32};
-
 use miette::{bail, Result, Severity};
 
-use crate::symbol::{Flag, Label, Register};
+use crate::{
+    debugger::Breakpoints,
+    symbol::{Flag, Label, Register, Span},
+};
 
 /// Assembly intermediate representation, contains starting address and list of instructions
+#[derive(Clone)]
 pub struct Air {
     /// Memory address to start program at
     orig: Option<u16>,
     /// AIR
-    ast: Vec<AsmLine>,
+    pub ast: Vec<AsmLine>,
+
+    pub breakpoints: Breakpoints,
+
+    pub src: &'static str,
 }
 
 impl Air {
-    pub fn new() -> Self {
+    pub fn new(src: &'static str) -> Self {
         Air {
             orig: None,
             ast: Vec::new(),
+            breakpoints: Breakpoints::new(),
+            src,
         }
     }
 
     /// Set the .orig offset for the program. Error if set twice.
     pub fn set_orig(&mut self, val: u16) -> Result<()> {
-        if let Some(_) = self.orig {
+        if self.orig.is_some() {
             bail!("Origin set twice.")
         } else {
             self.orig = Some(val);
@@ -34,9 +42,9 @@ impl Air {
         self.orig
     }
 
-    pub fn add_stmt(&mut self, stmt: AirStmt) {
+    pub fn add_stmt(&mut self, stmt: AirStmt, span: Span) {
         self.ast
-            .push(AsmLine::new((self.ast.len() + 1) as u16, stmt))
+            .push(AsmLine::new((self.ast.len() + 1) as u16, stmt, span))
     }
 
     pub fn get(&self, idx: usize) -> &AsmLine {
@@ -47,6 +55,10 @@ impl Air {
         self.ast.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.ast.len() == 0
+    }
+
     pub fn backpatch(&mut self) -> Result<()> {
         for stmt in self.ast.iter_mut() {
             stmt.backpatch()?;
@@ -55,17 +67,17 @@ impl Air {
     }
 }
 
-impl IntoIterator for Air {
-    type Item = AsmLine;
-    type IntoIter = std::vec::IntoIter<Self::Item>;
+impl<'a> IntoIterator for &'a Air {
+    type Item = &'a AsmLine;
+    type IntoIter = std::slice::Iter<'a, AsmLine>;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.ast.into_iter()
+        self.ast.iter()
     }
 }
 
 /// Single LC3 statement. Has optional labels.
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub enum AirStmt {
     /// Add src_reg with src_reg_imm and store in dest
     Add {
@@ -122,17 +134,11 @@ pub enum AirStmt {
         offset: u8,
     },
     /// Push onto stack (extended dialect)
-    Push {
-        src_reg: Register,
-    },
+    Push { src_reg: Register },
     /// Pop from stack (extended dialect)
-    Pop {
-        dest_reg: Register,
-    },
+    Pop { dest_reg: Register },
     /// Jump to subroutine and push onto stack (extended dialect)
-    Call {
-        dest_label: Label,
-    },
+    Call { dest_label: Label },
     /// Return from subroutine using stack (extended dialect)
     Rets,
     /// A raw value created during preprocessing
@@ -143,7 +149,7 @@ pub enum AirStmt {
 
 /// Used for ADD and AND commands as they support either 5-bit immediate values or registers as the
 /// last operand.
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum ImmediateOrReg {
     Reg(Register),
     Imm5(u8),
@@ -164,15 +170,16 @@ impl ImmediateOrReg {
 pub struct RawWord(pub u16);
 
 /// A line (16 bits) of assembly.
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub struct AsmLine {
     pub line: u16,
     pub stmt: AirStmt,
+    pub span: Span,
 }
 
 impl AsmLine {
-    pub fn new(line: u16, stmt: AirStmt) -> Self {
-        AsmLine { line, stmt }
+    pub fn new(line: u16, stmt: AirStmt, span: Span) -> Self {
+        AsmLine { line, stmt, span }
     }
 
     /// Fill label references using values from symbol table
@@ -340,7 +347,7 @@ impl AsmLine {
             // 6. Continued offset when call
             //
             // There are 10 bits of offset precision when using a call instruction.
-            // There also isn't really a way to work around this setup if other instructions 
+            // There also isn't really a way to work around this setup if other instructions
             // are to be left untouched.
             AirStmt::Push { src_reg } => {
                 let mut raw = 0xD000;
@@ -394,7 +401,11 @@ impl AsmLine {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{air::AirStmt, parser::AsmParser, symbol::Flag};
+    use crate::{
+        air::AirStmt,
+        parser::AsmParser,
+        symbol::{Flag, SrcOffset},
+    };
 
     // Backpatching tests
     #[test]
@@ -418,7 +429,15 @@ mod test {
                 stmt: AirStmt::Branch {
                     flag: Flag::Nzp,
                     dest_label: Label::Ref(2)
-                }
+                },
+                span: Span::new(
+                    SrcOffset(
+                        r#"
+        "#
+                        .len()
+                    ),
+                    "br label".len()
+                )
             }
         );
     }
@@ -439,6 +458,7 @@ mod test {
                 src_reg: Register::R2,
                 src_reg_imm: ImmediateOrReg::Reg(Register::R3),
             },
+            span: Span::dummy(),
         };
         assert_eq!(asm.emit().unwrap(), 0x1283)
     }
@@ -452,6 +472,7 @@ mod test {
                 src_reg: Register::R2,
                 src_reg_imm: ImmediateOrReg::Imm5(0b01111),
             },
+            span: Span::dummy(),
         };
         assert_eq!(asm.emit().unwrap(), 0x12AF)
     }
@@ -464,6 +485,7 @@ mod test {
                 flag: Flag::Nzp,
                 dest_label: Label::Ref(4),
             },
+            span: Span::dummy(),
         };
         assert_eq!(asm.emit().unwrap(), 0b0000111000000010)
     }
@@ -476,6 +498,7 @@ mod test {
                 flag: Flag::Nzp,
                 dest_label: Label::Ref(1),
             },
+            span: Span::dummy(),
         };
         assert_eq!(asm.emit().unwrap(), 0b0000111111111100)
     }
@@ -488,6 +511,7 @@ mod test {
                 flag: Flag::Nzp,
                 dest_label: Label::Ref(258),
             },
+            span: Span::dummy(),
         };
         assert!(asm.emit().is_err());
         let asm = AsmLine {
@@ -496,6 +520,7 @@ mod test {
                 flag: Flag::Nzp,
                 dest_label: Label::Ref(1),
             },
+            span: Span::dummy(),
         };
         assert!(asm.emit().is_err())
     }
@@ -510,6 +535,7 @@ mod test {
                 src_reg: Register::R4,
                 src_reg_imm: ImmediateOrReg::Imm5((-1i8) as u8),
             },
+            span: Span::dummy(),
         };
         assert_eq!(asm.emit().unwrap(), 0x193f);
     }
