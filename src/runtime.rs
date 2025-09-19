@@ -61,7 +61,6 @@ pub(super) enum RunFlag {
     N = 0b100,
     Z = 0b010,
     P = 0b001,
-    Uninit = 0b000,
 }
 
 impl RunEnvironment {
@@ -115,7 +114,7 @@ impl RunEnvironment {
                 pc: orig as u16,
                 // Stack pointer (R7) initalized to last address in user memory
                 reg: [0, 0, 0, 0, 0, 0, 0, USER_MEMORY_END - 1],
-                flag: RunFlag::Uninit,
+                flag: RunFlag::Z,
                 _psr: 0,
                 orig: orig as u16,
             },

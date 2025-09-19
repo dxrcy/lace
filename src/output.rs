@@ -242,7 +242,6 @@ impl Output {
             RunFlag::N /*.*/=> "NEGATIVE",
             RunFlag::Z /*.*/=> "  ZERO  ",
             RunFlag::P /*.*/=> "POSITIVE",
-            RunFlag::Uninit => " ****** ",
         });
         self.print("   \x1b[2m│\x1b[0m\n");
 
